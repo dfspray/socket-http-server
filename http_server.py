@@ -1,6 +1,8 @@
 import socket
 import sys
 import traceback
+import mimetypes
+import os
 
 def response_ok(body=b"This is a minimal response", mimetype=b"text/plain"):
     """
@@ -90,9 +92,20 @@ def response_path(path):
     # TODO: Raise a NameError if the requested content is not present
     # under webroot.
     new_path = 'webroot' + path
-    print(new_path)
+
     if not os.path.exists(new_path):
         raise NameError
+
+    elif os.path.isfile(new_path):
+        with open(new_path, 'rb') as file:
+            content = file.read()
+        mime_type = mimetypes.guess_type(path)[0].encode()
+
+    elif os.path.isdir(new_path):
+        mime_type = "text/plain".encode()
+        content = '\r\n'.join(os.listdir(new_path)).encode()
+
+    return content, mime_type
 
     # TODO: Fill in the appropriate content and mime_type give the path.
     # See the assignment guidelines for help on "mapping mime-types", though
@@ -101,18 +114,7 @@ def response_path(path):
     # If the path is "make_time.py", then you may OPTIONALLY return the
     # result of executing `make_time.py`. But you need only return the
     # CONTENTS of `make_time.py`.
-    content = b"not implemented"
-    mime_type = b"not implemented"
 
-    try:
-        with open(path, 'r') as file:
-            content = file.read()
-
-    except FileNotFoundError:
-        content = b"not implemented"
-        mime_type = b"not implemented"
-
-    return content, mime_type
 
 
 def server(log_buffer=sys.stderr):
@@ -134,11 +136,9 @@ def server(log_buffer=sys.stderr):
                 while True:
                     data = conn.recv(1024)
                     request += data.decode('utf8')
-
                     if '\r\n\r\n' in request:
                         break
 		
-
                 print("Request received:\n{}\n\n".format(request))
 
                 # TODO: Use parse_request to retrieve the path from the request.
@@ -147,16 +147,22 @@ def server(log_buffer=sys.stderr):
                 
                     # TODO: Use response_path to retrieve the content and the mimetype,
                     # based on the request path.
+                    try:
+                        content, mime_type = response_path(path)
 
                     # TODO; If parse_request raised a NotImplementedError, then let
                     # response be a method_not_allowed response. If response_path raised
                     # a NameError, then let response be a not_found response. Else,
                     # use the content and mimetype from response_path to build a 
                     # response_ok.
-                    response = response_ok(
-                        body=b"Welcome to my web server",
-                        mimetype=b"text/plain"
-                    )
+                        response = response_ok(
+                            body=content,
+                            mimetype=mime_type
+                        )
+                    except NameError as error:
+                        response = response_not_found()
+                        print(error)
+
                 except NotImplementedError:
                     response = response_method_not_allowed()
 
@@ -169,6 +175,7 @@ def server(log_buffer=sys.stderr):
     except KeyboardInterrupt:
         sock.close()
         return
+
     except:
         traceback.print_exc()
 
